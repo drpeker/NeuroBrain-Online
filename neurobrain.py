@@ -37,6 +37,12 @@ from neurobrain_modules.motors import (
     motors_stop,
 )
 
+from neurobrain_modules.gpio import (
+    gpio_write,
+    gpio_read,
+    gpio_cleanup,
+)
+
 def find_alsa_device(command, device_name):
     """ALSA kartını isminden bul; card numarası değişse bile çalışır."""
     try:
@@ -264,6 +270,48 @@ CAMERA_TOOL = {
 }
 
 
+
+GPIO_WRITE_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "gpio_write",
+        "description": "Set an accessible Raspberry Pi BCM GPIO pin HIGH or LOW.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pin": {
+                    "type": "integer",
+                    "description": "BCM GPIO number."
+                },
+                "state": {
+                    "type": "string",
+                    "enum": ["HIGH", "LOW"]
+                }
+            },
+            "required": ["pin", "state"]
+        }
+    }
+}
+
+
+GPIO_READ_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "gpio_read",
+        "description": "Read the actual HIGH or LOW state of an accessible Raspberry Pi BCM GPIO pin.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pin": {
+                    "type": "integer",
+                    "description": "BCM GPIO number."
+                }
+            },
+            "required": ["pin"]
+        }
+    }
+}
+
 def get_camera_view(question):
     """Inspect the robot's current camera frame using Groq Vision."""
 
@@ -337,6 +385,11 @@ def stop(*_):
 
     try:
         motors_stop()
+    except Exception:
+        pass
+
+    try:
+        gpio_cleanup()
     except Exception:
         pass
 
@@ -566,6 +619,10 @@ while True:
 You are a small, cheerful, friendly and natural conversational robot.
 
 You have a physical camera available through the get_camera_view tool.
+You have physical digital GPIO access through the gpio_write and gpio_read tools.
+GPIO pin numbers always use BCM numbering.
+For GPIO actions or GPIO state questions, use the appropriate GPIO tool.
+Never claim that a GPIO action succeeded or report its current state unless the appropriate GPIO tool reports it.
 
 Use the camera tool whenever current visual information from your physical surroundings would materially help answer the user. You may decide to look through the camera on your own initiative. The user does not need to explicitly ask you to use the camera.
 
@@ -596,7 +653,7 @@ Silently infer and correct obvious minor speech-recognition errors from context.
                         lambda: client.chat.completions.create(
                         model="openai/gpt-oss-20b",
                         messages=messages,
-                        tools=[CAMERA_TOOL],
+                        tools=[CAMERA_TOOL, GPIO_WRITE_TOOL, GPIO_READ_TOOL],
                         tool_choice="auto",
                         temperature=0.6,
                         max_completion_tokens=200,
@@ -636,12 +693,65 @@ Silently infer and correct obvious minor speech-recognition errors from context.
                                     }
                                 )
 
+                            elif tool_call.function.name == "gpio_write":
+
+                                try:
+                                    args = json.loads(
+                                        tool_call.function.arguments or "{}"
+                                    )
+
+                                    result = gpio_write(
+                                        args["pin"],
+                                        args["state"]
+                                    )
+
+                                except Exception as e:
+                                    result = {
+                                        "success": False,
+                                        "error": str(e)
+                                    }
+
+                                messages.append(
+                                    {
+                                        "role": "tool",
+                                        "tool_call_id": tool_call.id,
+                                        "name": "gpio_write",
+                                        "content": json.dumps(result)
+                                    }
+                                )
+
+                            elif tool_call.function.name == "gpio_read":
+
+                                try:
+                                    args = json.loads(
+                                        tool_call.function.arguments or "{}"
+                                    )
+
+                                    result = gpio_read(
+                                        args["pin"]
+                                    )
+
+                                except Exception as e:
+                                    result = {
+                                        "success": False,
+                                        "error": str(e)
+                                    }
+
+                                messages.append(
+                                    {
+                                        "role": "tool",
+                                        "tool_call_id": tool_call.id,
+                                        "name": "gpio_read",
+                                        "content": json.dumps(result)
+                                    }
+                                )
+
                         # Kamera sonucunu gördükten sonra nihai cevabı üret.
                         final_reply = groq_with_mic_drain(
                             lambda: client.chat.completions.create(
                             model="openai/gpt-oss-20b",
                             messages=messages,
-                            tools=[CAMERA_TOOL],
+                            tools=[CAMERA_TOOL, GPIO_WRITE_TOOL, GPIO_READ_TOOL],
                             tool_choice="none",
                             temperature=0.6,
                             max_completion_tokens=200,
