@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Secrets
+.env
+.env.*
+*.key
+*.pem
+
+# Runtime audio/images
+*.wav
+*.mp3
+*.jpg
+*.jpeg
+
+# NeuroBrain backups/checkpoints
+*_before_*
+*BREAKPOINT*
+*.sha256
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
