@@ -37,7 +37,36 @@ from neurobrain_modules.motors import (
     motors_stop,
 )
 
-MIC = "hw:1,0"
+def find_alsa_device(command, device_name):
+    """ALSA kartını isminden bul; card numarası değişse bile çalışır."""
+    try:
+        output = subprocess.check_output(
+            [command, "-l"],
+            text=True,
+            stderr=subprocess.STDOUT
+        )
+        for line in output.splitlines():
+            if line.startswith("card ") and device_name.lower() in line.lower():
+                card = line.split(":", 1)[0].split()[1]
+                return f"hw:{card},0"
+    except Exception as e:
+        print(f"ALSA cihaz tarama hatası ({device_name}): {e}")
+
+    return None
+
+
+MIC = find_alsa_device("arecord", "C270")
+SPEAKER = find_alsa_device("aplay", "Headphones")
+
+if not MIC:
+    raise RuntimeError("C270 mikrofon bulunamadı.")
+
+if not SPEAKER:
+    raise RuntimeError("Raspberry Pi Headphones ses çıkışı bulunamadı.")
+
+print(f"Mikrofon bulundu: {MIC}")
+print(f"Ses çıkışı bulundu: {SPEAKER}")
+
 RATE = 16000
 
 PIPER = "/home/drpeker/neurobrain/venv/bin/piper"
@@ -155,7 +184,7 @@ def speak(text, language):
 
     # Ses çalarken de mikrofonu VAD'a vermeden tüket.
     player = subprocess.Popen(
-        ["aplay", "-q", "-D", "hw:0,0", EDGE_WAV],
+        ["aplay", "-q", "-D", SPEAKER, EDGE_WAV],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL
     )
